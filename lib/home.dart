@@ -1,6 +1,4 @@
 import 'dart:convert';
-import 'dart:html';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
@@ -26,14 +24,14 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> {
   // String message = 'Attempting to connect to socket ...';
 
-  final _localVideoRenderer = RTCVideoRenderer();
+  RTCVideoRenderer localVideoRenderer = RTCVideoRenderer();
   final _remoteVideoRenderer = RTCVideoRenderer();
   final sdpController = TextEditingController();
 
   bool _offer = false;
 
   RTCPeerConnection? _peerConnection;
-  MediaStream? _localStream;
+  MediaStream? localStream;
 
   final username = "Abednego";
   bool _inCalling = false;
@@ -41,7 +39,7 @@ class _HomeState extends State<Home> {
   var sdp;
 
   initRenderers() async {
-    await _localVideoRenderer.initialize();
+    await localVideoRenderer.initialize();
     await _remoteVideoRenderer.initialize();
   }
 
@@ -52,17 +50,16 @@ class _HomeState extends State<Home> {
   void initState() {
     super.initState();
     initRenderers();
-    startCall();
+    consoldiatedFunctionCalls();
     navigator.mediaDevices.ondevicechange = (event) async {
       mediaDevicesList = await navigator.mediaDevices.enumerateDevices();
     };
-    connectSocket();
   }
 
   @override
   dispose() {
-    _localStream?.dispose();
-    _localVideoRenderer.dispose();
+    localStream?.dispose();
+    localVideoRenderer.dispose();
     sdpController.dispose();
     super.dispose();
   }
@@ -77,7 +74,7 @@ class _HomeState extends State<Home> {
         height: MediaQuery.of(context).size.height,
         decoration: const BoxDecoration(color: Colors.white),
         child: _inCalling
-            ? RTCVideoView(_localVideoRenderer)
+            ? RTCVideoView(localVideoRenderer)
             : const Center(
                 child: Text('Press the start call button to begin'),
               ),
@@ -93,7 +90,7 @@ class _HomeState extends State<Home> {
     );
   }
 
-  void startCall() async {
+  Future<void> startCall() async {
     try {
       final mediaConstraints = <String, dynamic>{
         'audio': true,
@@ -110,8 +107,7 @@ class _HomeState extends State<Home> {
 
       var stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
       mediaDevicesList = await navigator.mediaDevices.enumerateDevices();
-      _localStream = stream;
-      _localVideoRenderer.srcObject = _localStream;
+      localStream = stream;
     } catch (e) {
       print(e.toString());
     }
@@ -120,39 +116,39 @@ class _HomeState extends State<Home> {
     setState(() => _inCalling = true);
   }
 
-  void gotMessageFromServer(fromId, message) async {
-    var signal = jsonDecode(message);
-    if (fromId != socketId) {
-      if (signal.sdp) {
-        connections[fromId]
-            .setRemoteDescription(RTCSessionDescription(signal.sdp, 'offer'))
-            .then((value) => {
-                  if (signal.sdp.type == 'offer')
-                    {
-                      connections[fromId].createAnswer().then((description) => {
-                            connections[fromId]
-                                .setLocalDescription(description)
-                                .then((value) => {
-                                      _socket.emit('signal', {
-                                        "toId": fromId,
-                                        "message": jsonEncode({
-                                          'sdp': connections[fromId]
-                                              .getLocalDescription()
-                                              .toString()
-                                        })
-                                      })
-                                    })
-                          })
-                    }
-                });
-      }
-      if (signal.ice) {
-        connections[fromId].addCandidate(RtcIceCandidate(signal.ice));
-      }
-    }
-  }
+  // void gotMessageFromServer(fromId, message) async {
+  //   var signal = jsonDecode(message);
+  //   if (fromId != socketId) {
+  //     if (signal.sdp) {
+  //       connections[fromId]
+  //           .setRemoteDescription(RTCSessionDescription(signal.sdp, 'offer'))
+  //           .then((value) => {
+  //                 if (signal.sdp.type == 'offer')
+  //                   {
+  //                     connections[fromId].createAnswer().then((description) => {
+  //                           connections[fromId]
+  //                               .setLocalDescription(description)
+  //                               .then((value) => {
+  //                                     _socket.emit('signal', {
+  //                                       "toId": fromId,
+  //                                       "message": jsonEncode({
+  //                                         'sdp': connections[fromId]
+  //                                             .getLocalDescription()
+  //                                             .toString()
+  //                                       })
+  //                                     })
+  //                                   })
+  //                         })
+  //                   }
+  //               });
+  //     }
+  //     if (signal.ice) {
+  //       connections[fromId].addCandidate(RtcIceCandidate(signal.ice));
+  //     }
+  //   }
+  // }
 
-  void connectSocket() async {
+  Future<void> connectSocket() async {
     Map<String, dynamic> configuration = {
       "iceServers": [
         {"url": "stun:stun.l.google.com:19302"},
@@ -175,7 +171,7 @@ class _HomeState extends State<Home> {
     // mediaDevicesList = await navigator.mediaDevices.enumerateDevices();
     // _localStream = stream;
 
-    print(_localVideoRenderer.srcObject);
+    print('Stream 2: $localStream');
     final Map<String, dynamic> offerSdpConstraints = {
       "mandatory": {
         "OfferToReceiveAudio": true,
@@ -196,7 +192,7 @@ class _HomeState extends State<Home> {
       print('Socket.io server disconnected');
     });
 
-    _socket.on('signal', (data) => gotMessageFromServer(data[0], data[1]));
+    // _socket.on('signal', (data) => gotMessageFromServer(data[0], data[1]));
 
     _socket.on(
         "connect",
@@ -223,9 +219,9 @@ class _HomeState extends State<Home> {
                       },
                       if (path != null)
                         {
-                          if (_localStream != null)
+                          if (localStream != null)
                             {
-                              connections[socketListId].addStream(_localStream),
+                              connections[socketListId].addStream(localStream),
                             }
                           else
                             {
@@ -239,8 +235,8 @@ class _HomeState extends State<Home> {
                       continue;
                     }
                     try {
-                      if (_localStream != null) {
-                        connections[id].addStream(_localStream);
+                      if (localStream != null) {
+                        connections[id].addStream(localStream);
                       } else {
                         print("hhh");
                       }
@@ -272,11 +268,16 @@ class _HomeState extends State<Home> {
 
   void endCall() async {
     try {
-      await _localStream?.dispose();
-      _localVideoRenderer.srcObject = null;
+      await localStream?.dispose();
+      localVideoRenderer.srcObject = null;
       setState(() => _inCalling = false);
     } catch (e) {
       print(e.toString());
     }
+  }
+  
+  Future<void> consoldiatedFunctionCalls() async {
+    await startCall();
+    await connectSocket();
   }
 }
